@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: './', // Wspiera wdrażanie w podkatalogach, np. na GitHub Pages
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
