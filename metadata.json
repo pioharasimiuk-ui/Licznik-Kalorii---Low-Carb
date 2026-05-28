@@ -1,0 +1,6 @@
+{
+  "name": "Licznik Kalorii",
+  "description": "Prosta i estetyczna aplikacja do liczenia kalorii oraz makroskładników spożywanych produktów.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
