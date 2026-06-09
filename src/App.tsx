@@ -20,7 +20,8 @@ import {
   CheckCircle,
   HelpCircle,
   Clock,
-  ChefHat
+  ChefHat,
+  Share2
 } from 'lucide-react';
 import { Product, MealLog, DayLog, UserGoals, MealCategory, Recipe } from './types';
 import { POPULAR_PRODUCTS } from './data/mockProducts';
@@ -30,6 +31,7 @@ import WaterTracker from './components/WaterTracker';
 import WeightTracker from './components/WeightTracker';
 import ProductForm from './components/ProductForm';
 import RecipeManager from './components/RecipeManager';
+import ShareBackup from './components/ShareBackup';
 
 // Helper to get local date string YYYY-MM-DD
 const getTodayString = () => {
@@ -83,7 +85,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [portionWeight, setPortionWeight] = useState<number>(100);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dziennik' | 'baza' | 'przepisy'>('dziennik');
+  const [activeTab, setActiveTab] = useState<'dziennik' | 'baza' | 'przepisy' | 'kopia'>('dziennik');
   const [tipMessage, setTipMessage] = useState('');
 
   // Dynamic set of categories based on user choice
@@ -244,6 +246,21 @@ export default function App() {
     setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
   };
 
+  // Import custom products and recipes from sync code
+  const handleImportData = (importedProducts: Product[], importedRecipes: Recipe[]) => {
+    setCustomProducts((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id));
+      const filteredNew = importedProducts.map(p => ({ ...p, isCustom: true })).filter((p) => !existingIds.has(p.id));
+      return [...filteredNew, ...prev];
+    });
+
+    setRecipes((prev) => {
+      const existingIds = new Set(prev.map((r) => r.id));
+      const filteredNew = importedRecipes.filter((r) => !existingIds.has(r.id));
+      return [...filteredNew, ...prev];
+    });
+  };
+
   // Log a specific cooked portion of a recipe
   const handleLogRecipe = (recipe: Recipe, portionWeightGrams: number, category: MealCategory) => {
     const ratio = portionWeightGrams / recipe.totalWeightGrams;
@@ -389,6 +406,18 @@ export default function App() {
             >
               <ChefHat className="w-3.5 h-3.5" /> 
               Moje Przepisy
+            </button>
+            <button
+              onClick={() => setActiveTab('kopia')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'kopia' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/10' 
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100/60'
+              }`}
+              id="tab-kopia"
+            >
+              <Share2 className="w-3.5 h-3.5" /> 
+              Udostępnianie
             </button>
 
             <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block" />
@@ -561,6 +590,15 @@ export default function App() {
                 setSearchTerm(initialName);
               }
             }}
+          />
+        )}
+
+        {/* ================= APP MODE: SHARE AND BACKUP UTILITY ================= */}
+        {activeTab === 'kopia' && (
+          <ShareBackup
+            customProducts={customProducts}
+            recipes={recipes}
+            onImportData={handleImportData}
           />
         )}
 
