@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Flame } from 'lucide-react';
+import { Flame, Calculator, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { UserGoals } from '../types';
 
 interface DailySummaryProps {
@@ -34,6 +34,15 @@ export default function DailySummary({
   const [mealCount, setMealCount] = useState<3 | 5>(goals.mealCount || 3);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // BMR/TDEE Calculator States
+  const [showBmrCalc, setShowBmrCalc] = useState(false);
+  const [calcGender, setCalcGender] = useState<'male' | 'female'>('male');
+  const [calcAge, setCalcAge] = useState<number>(30);
+  const [calcHeight, setCalcHeight] = useState<number>(175);
+  const [calcWeight, setCalcWeight] = useState<number>(75);
+  const [calcActivity, setCalcActivity] = useState<number>(1.2); // Default sedentary
+  const [calcGoalType, setCalcGoalType] = useState<'lose' | 'maintain' | 'gain'>('maintain');
+
   const recalculateMacros = (calories: number, type: 'balanced' | 'low-carb' | 'mediterranean' | 'custom') => {
     if (type === 'balanced') {
       setGoalProt(Math.round((calories * 0.3) / 4));
@@ -48,6 +57,33 @@ export default function DailySummary({
       setGoalCarb(Math.round((calories * 0.4) / 4));
       setGoalFat(Math.round((calories * 0.35) / 9));
     }
+  };
+
+  const handleCalculateBmr = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // Mifflin-St Jeor Formula
+    let bmr = 0;
+    if (calcGender === 'male') {
+      bmr = 10 * calcWeight + 6.25 * calcHeight - 5 * calcAge + 5;
+    } else {
+      bmr = 10 * calcWeight + 6.25 * calcHeight - 5 * calcAge - 161;
+    }
+
+    const tdee = bmr * calcActivity;
+    let finalCal = tdee;
+    if (calcGoalType === 'lose') {
+      finalCal = tdee - 350; // gentle calorie deficit for weight loss
+    } else if (calcGoalType === 'gain') {
+      finalCal = tdee + 300; // gentle calorie surplus for muscle gain
+    }
+
+    const roundedCal = Math.round(Math.max(finalCal, 1200));
+    const calculatedWater = Math.round(calcWeight * 35); // 35 ml water per 1 kg of body weight
+
+    setGoalCal(roundedCal);
+    setGoalWater(calculatedWater);
+    recalculateMacros(roundedCal, dietType);
+    setShowBmrCalc(false);
   };
 
   const caloriesLeft = goals.calories - totals.calories;
@@ -140,6 +176,118 @@ export default function DailySummary({
                 <option value={5}>🍽️ 5 posiłków (z Drugim śniadaniem i Przekąskami)</option>
               </select>
             </div>
+          </div>
+
+          {/* Expandable BMR & TDEE Calculator panel */}
+          <div className="border border-indigo-100 rounded-xl bg-indigo-50/20 p-2.5">
+            <button
+              type="button"
+              onClick={() => setShowBmrCalc(!showBmrCalc)}
+              className="w-full flex items-center justify-between text-xs font-bold text-indigo-700 cursor-pointer"
+            >
+              <span className="flex items-center gap-1">
+                <Calculator className="w-3.5 h-3.5 fill-indigo-50" /> Kalkulator zapotrzebowania BMR / TDEE
+              </span>
+              {showBmrCalc ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {showBmrCalc && (
+              <div className="mt-2.5 space-y-2.5 pt-2 border-t border-indigo-100/40 text-xs">
+                {/* Gender selection */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCalcGender('male')}
+                    className={`py-1 rounded font-bold border transition ${
+                      calcGender === 'male'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Mężczyzna 🧔
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalcGender('female')}
+                    className={`py-1 rounded font-bold border transition ${
+                      calcGender === 'female'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    Kobieta 👩
+                  </button>
+                </div>
+
+                {/* Age, Height, Weight inputs */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Wiek</label>
+                    <input
+                      type="number"
+                      value={calcAge}
+                      onChange={(e) => setCalcAge(Math.max(parseInt(e.target.value) || 0, 1))}
+                      className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-center font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Wzrost (cm)</label>
+                    <input
+                      type="number"
+                      value={calcHeight}
+                      onChange={(e) => setCalcHeight(Math.max(parseInt(e.target.value) || 0, 1))}
+                      className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-center font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Waga (kg)</label>
+                    <input
+                      type="number"
+                      value={calcWeight}
+                      onChange={(e) => setCalcWeight(Math.max(parseInt(e.target.value) || 0, 1))}
+                      className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-center font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                {/* Physical Activity and Goal selector */}
+                <div className="grid grid-cols-1 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold block mb-0.5">POZIOM AKTYWNOŚCI DOBOWEJ</label>
+                    <select
+                      value={calcActivity}
+                      onChange={(e) => setCalcActivity(parseFloat(e.target.value))}
+                      className="w-full bg-white border border-slate-200 rounded px-2 py-1 cursor-pointer font-medium"
+                    >
+                      <option value={1.2}>Siedzący 🛋️ (brak treningów / praca biurowa)</option>
+                      <option value={1.375}>Niska aktywność 🚶 (spacery / lekka praca)</option>
+                      <option value={1.55}>Umiarkowana ⛰️ (regularna praca fizyczna)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold block mb-0.5">TWÓJ REŻIM / CEL</label>
+                    <select
+                      value={calcGoalType}
+                      onChange={(e) => setCalcGoalType(e.target.value as any)}
+                      className="w-full bg-white border border-slate-200 rounded px-2 py-1 cursor-pointer font-medium"
+                    >
+                      <option value="lose">Redukcja wagi (-15% kalorii) 📉</option>
+                      <option value="maintain">Utrzymanie obecnej wagi (zero) ⚖️</option>
+                      <option value="gain">Budowanie masy (+10% kalorii) 📈</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCalculateBmr}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded py-1.5 mt-1 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Oblicz i Zastosuj powyżej
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60">

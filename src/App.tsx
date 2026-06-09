@@ -21,7 +21,9 @@ import {
   HelpCircle,
   Clock,
   ChefHat,
-  Share2
+  Share2,
+  BarChart2,
+  Pill
 } from 'lucide-react';
 import { Product, MealLog, DayLog, UserGoals, MealCategory, Recipe } from './types';
 import { POPULAR_PRODUCTS } from './data/mockProducts';
@@ -33,6 +35,8 @@ import ProductForm from './components/ProductForm';
 import RecipeManager from './components/RecipeManager';
 import ShareBackup from './components/ShareBackup';
 import OpenFoodFactsSearch from './components/OpenFoodFactsSearch';
+import MedsTracker from './components/MedsTracker';
+import ReportDashboard from './components/ReportDashboard';
 
 // Helper to get local date string YYYY-MM-DD
 const getTodayString = () => {
@@ -86,7 +90,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [portionWeight, setPortionWeight] = useState<number>(100);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dziennik' | 'baza' | 'przepisy' | 'kopia'>('dziennik');
+  const [activeTab, setActiveTab] = useState<'dziennik' | 'baza' | 'przepisy' | 'raporty' | 'kopia'>('dziennik');
   const [tipMessage, setTipMessage] = useState('');
 
   // Dynamic set of categories based on user choice
@@ -409,6 +413,18 @@ export default function App() {
               Moje Przepisy
             </button>
             <button
+              onClick={() => setActiveTab('raporty')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'raporty' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/10' 
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100/60'
+              }`}
+              id="tab-raporty"
+            >
+              <BarChart2 className="w-3.5 h-3.5" /> 
+              Analiza & Raporty
+            </button>
+            <button
               onClick={() => setActiveTab('kopia')}
               className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'kopia' 
@@ -602,6 +618,14 @@ export default function App() {
                 setSearchTerm(initialName);
               }
             }}
+          />
+        )}
+
+        {/* ================= APP MODE: REPORTS AND CHARTS ================= */}
+        {activeTab === 'raporty' && (
+          <ReportDashboard
+            dayLogs={dayLogs}
+            goals={goals}
           />
         )}
 
@@ -935,6 +959,11 @@ export default function App() {
               <WeightTracker 
                 currentWeight={currentDayLog.weightKg}
                 onUpdateWeight={(w) => updateCurrentDayLog({ weightKg: w })}
+              />
+
+              <MedsTracker
+                medsTaken={currentDayLog.medsTaken}
+                onUpdateMeds={(meds) => updateCurrentDayLog({ medsTaken: meds })}
               />
 
             </div>

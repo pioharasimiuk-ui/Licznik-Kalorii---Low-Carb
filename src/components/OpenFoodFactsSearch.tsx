@@ -10,7 +10,10 @@ import {
   Barcode,
   ShoppingBag,
   Heart,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  X,
+  Check
 } from 'lucide-react';
 import { Product } from '../types';
 
@@ -47,6 +50,116 @@ export default function OpenFoodFactsSearch({ onImportProduct, customProducts }:
   const [results, setResults] = useState<Product[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [successId, setSuccessId] = useState<string | null>(null);
+
+  // Scanner States
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+
+  // Skaner logic
+  const startCamera = async () => {
+    setScannerError('');
+    setIsScanning(true);
+    
+    // Allow React to mount the video tag first
+    setTimeout(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        
+        const video = document.getElementById('barcode-scanner-video') as HTMLVideoElement;
+        if (video) {
+          video.srcObject = stream;
+          video.setAttribute('playsinline', 'true'); // Required for iOS
+          video.play();
+          
+          // Use native BarcodeDetector API if available (Chrome / Android / Safari 17+)
+          if ('BarcodeDetector' in window) {
+            const detector = new (window as any).BarcodeDetector({
+              formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e']
+            });
+            
+            const interval = setInterval(async () => {
+              if (video.paused || video.ended) return;
+              try {
+                const barcodes = await detector.detect(video);
+                if (barcodes.length > 0) {
+                  const firstDetected = barcodes[0].rawValue;
+                  clearInterval(interval);
+                  handleStopScanning(stream);
+                  setQuery(firstDetected);
+                  triggerAutoSearch(firstDetected);
+                }
+              } catch (e) {
+                console.error("Native barcode detect error: ", e);
+              }
+            }, 600);
+            
+            (window as any)._scannerInterval = interval;
+          }
+        }
+      } catch (err: any) {
+        console.error("Camera access failed", err);
+        setScannerError("Brak dostępu do kamery. Upewnij się, że zezwoliłeś na używanie kamery lub wpisz kod ręcznie.");
+      }
+    }, 150);
+  };
+
+  const handleStopScanning = (streamToStop?: MediaStream) => {
+    if ((window as any)._scannerInterval) {
+      clearInterval((window as any)._scannerInterval);
+      (window as any)._scannerInterval = null;
+    }
+    
+    const video = document.getElementById('barcode-scanner-video') as HTMLVideoElement;
+    if (video && video.srcObject) {
+      const stream = video.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      video.srcObject = null;
+    }
+    
+    if (streamToStop) {
+      streamToStop.getTracks().forEach(track => track.stop());
+    }
+    
+    setIsScanning(false);
+  };
+
+  const triggerAutoSearch = async (barcodeText: string) => {
+    setIsLoading(true);
+    setErrorOnSearch('');
+    setHasSearched(true);
+    setResults([]);
+    try {
+      const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcodeText}.json`);
+      if (!response.ok) {
+        throw new Error('Skanowany produkt nie odpowiedział na zapytanie.');
+      }
+      const data = await response.json();
+      if (data.status === 1 && data.product) {
+        const parsed = parseOFFProduct(data.product);
+        if (parsed) {
+          setResults([parsed]);
+        } else {
+          setResults([]);
+        }
+      } else {
+        setResults([]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorOnSearch('Skanowanie przebiegło pomyślnie, lecz nie znaleziono rekordu w bazie Open Food Facts.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Simulated scan triggers for outstanding testability
+  const handleSimulateScan = (fakeBarcode: string) => {
+    handleStopScanning();
+    setQuery(fakeBarcode);
+    triggerAutoSearch(fakeBarcode);
+  };
 
   // Parse a single OFF API product record into our internal Product type
   const parseOFFProduct = (item: OFFProduct): Product | null => {
@@ -179,32 +292,108 @@ export default function OpenFoodFactsSearch({ onImportProduct, customProducts }:
       </div>
 
       {/* Input query form */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1">
-          <span className="absolute left-3.5 top-3 text-indigo-400">
-            {/^\d+$/.test(query) ? <Barcode className="w-4 h-4" /> : <Search className="w-4 h-4" />}
-          </span>
-          <input
-            type="text"
-            placeholder="Wpisz np. 'Almette rzodkiewka', 'Skittles', lub kod: '5900251123456'..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            disabled={isLoading}
-            className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:outline-[1.5px] focus:outline-indigo-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 shadow-xs"
-          />
-        </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <form onSubmit={handleSearch} className="flex-1 flex gap-2">
+          <div className="relative flex-1">
+            <span className="absolute left-3.5 top-3 text-indigo-400">
+              {/^\d+$/.test(query) ? <Barcode className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+            </span>
+            <input
+              type="text"
+              placeholder="Wpisz np. 'Almette rzodkiewka', 'Skittles', lub kod: '5900251123456'..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              disabled={isLoading}
+              className="w-full bg-white border border-slate-200 focus:border-indigo-500 focus:outline-[1.5px] focus:outline-indigo-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 shadow-xs"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading || !query.trim()}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold rounded-xl px-4 py-2 text-xs transition duration-150 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs font-heading"
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+            ) : (
+              <>Szukaj</>
+            )}
+          </button>
+        </form>
+
         <button
-          type="submit"
-          disabled={isLoading || !query.trim()}
-          className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold rounded-xl px-4 py-2 text-xs transition duration-150 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+          type="button"
+          onClick={isScanning ? () => handleStopScanning() : startCamera}
+          className="bg-slate-850 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl px-3.5 py-2.5 text-xs transition duration-150 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
         >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-          ) : (
-            <>Szukaj w bazie</>
-          )}
+          <Camera className="w-4 h-4" />
+          {isScanning ? "Zamknij skaner" : "Skanuj kod kreskowy 📸"}
         </button>
-      </form>
+      </div>
+
+      {/* Camera Live Viewfinder Block */}
+      {isScanning && (
+        <div className="bg-slate-950 rounded-2xl p-4 relative border border-slate-850 shadow-md space-y-3" id="live-camera-viewfinder">
+          <div className="flex items-center justify-between text-white pb-2 border-b border-slate-800">
+            <span className="text-[11px] font-black tracking-wider uppercase flex items-center gap-1.5 text-slate-200">
+              <Camera className="w-4 h-4 text-emerald-400 animate-pulse" /> Skaner kodu kreskowego LIVE
+            </span>
+            <button
+              type="button"
+              onClick={() => handleStopScanning()}
+              className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {scannerError && (
+            <div className="p-3 bg-rose-500/20 text-rose-100 text-[10.5px] rounded-xl border border-rose-500/30">
+              {scannerError}
+            </div>
+          )}
+
+          {/* Video viewport frame */}
+          <div className="relative aspect-video w-full max-w-sm mx-auto bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
+            <video 
+              id="barcode-scanner-video" 
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+            />
+            {/* Viewfinder laser animation effect */}
+            <div className="absolute inset-x-6 top-1/2 h-0.5 bg-rose-500 shadow-xs shadow-rose-500/90 animate-infinite" style={{ animation: 'bounce 1.6s infinite ease-in-out' }} />
+            
+            {/* Guide line box */}
+            <div className="absolute inset-8 border-2 border-dashed border-emerald-400/40 rounded-lg pointer-events-none flex items-center justify-center">
+              <span className="text-[9px] text-white/50 font-bold bg-black/60 px-2 py-0.5 rounded-full select-none">Skieruj aparat na kod kreskowy</span>
+            </div>
+          </div>
+
+          {/* Test and playability buttons for desktop fallback support */}
+          <div className="bg-white/5 rounded-xl p-3 border border-white/10 space-y-2">
+            <span className="text-[10px] text-slate-400 font-bold block">
+              💻 Wygodne przyciski testowe (bez użycia aparatu):
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { name: 'Piątnica Serek Wiejski 🌾', ean: '5900251196429' },
+                { name: 'Owsiane Górskie Helcom 🥣', ean: '5902143000522' },
+                { name: 'Skyr Truskawkowe Piąt. 🍓', ean: '5900251139419' },
+                { name: 'Makaron spaghetti Barilla 🍝', ean: '8076809578278' }
+              ].map((testItem) => (
+                <button
+                  key={testItem.ean}
+                  type="button"
+                  onClick={() => handleSimulateScan(testItem.ean)}
+                  className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:bg-indigo-650 hover:bg-indigo-600 rounded-lg text-[10.5px] text-slate-300 font-semibold text-left transition cursor-pointer"
+                >
+                  {testItem.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Helper fast links prompts */}
       <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
