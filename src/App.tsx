@@ -19,15 +19,17 @@ import {
   RotateCcw,
   CheckCircle,
   HelpCircle,
-  Clock
+  Clock,
+  ChefHat
 } from 'lucide-react';
-import { Product, MealLog, DayLog, UserGoals, MealCategory } from './types';
+import { Product, MealLog, DayLog, UserGoals, MealCategory, Recipe } from './types';
 import { POPULAR_PRODUCTS } from './data/mockProducts';
 import DateSwitcher from './components/DateSwitcher';
 import DailySummary from './components/DailySummary';
 import WaterTracker from './components/WaterTracker';
 import WeightTracker from './components/WeightTracker';
 import ProductForm from './components/ProductForm';
+import RecipeManager from './components/RecipeManager';
 
 // Helper to get local date string YYYY-MM-DD
 const getTodayString = () => {
@@ -45,6 +47,12 @@ export default function App() {
   // Custom user products
   const [customProducts, setCustomProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('kcal_custom_products');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // User created culinary recipes database
+  const [recipes, setRecipes] = useState<Recipe[]>(() => {
+    const saved = localStorage.getItem('kcal_user_recipes');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -75,7 +83,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [portionWeight, setPortionWeight] = useState<number>(100);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dziennik' | 'baza'>('dziennik');
+  const [activeTab, setActiveTab] = useState<'dziennik' | 'baza' | 'przepisy'>('dziennik');
   const [tipMessage, setTipMessage] = useState('');
 
   // Dynamic set of categories based on user choice
@@ -97,6 +105,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('kcal_custom_products', JSON.stringify(customProducts));
   }, [customProducts]);
+
+  useEffect(() => {
+    localStorage.setItem('kcal_user_recipes', JSON.stringify(recipes));
+  }, [recipes]);
 
   useEffect(() => {
     localStorage.setItem('kcal_daily_logs', JSON.stringify(dayLogs));
@@ -222,6 +234,40 @@ export default function App() {
     }
   };
 
+  // Save a new recipe
+  const handleSaveRecipe = (recipe: Recipe) => {
+    setRecipes((prev) => [recipe, ...prev]);
+  };
+
+  // Delete an existing recipe from database
+  const handleDeleteRecipe = (recipeId: string) => {
+    setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+  };
+
+  // Log a specific cooked portion of a recipe
+  const handleLogRecipe = (recipe: Recipe, portionWeightGrams: number, category: MealCategory) => {
+    const ratio = portionWeightGrams / recipe.totalWeightGrams;
+    const newMeal: MealLog = {
+      id: 'meal-' + Date.now(),
+      name: `[Przepis] ${recipe.name}`,
+      calories: Math.round(recipe.totalCalories * ratio),
+      protein: parseFloat((recipe.totalProtein * ratio).toFixed(1)),
+      carbs: parseFloat((recipe.totalCarbs * ratio).toFixed(1)),
+      fat: parseFloat((recipe.totalFat * ratio).toFixed(1)),
+      weightGrams: portionWeightGrams,
+      category: category,
+      loggedAt: new Date().toISOString()
+    };
+
+    const currentMeals = currentDayLog.meals;
+    updateCurrentDayLog({
+      meals: [...currentMeals, newMeal]
+    });
+    
+    setActiveTab('dziennik');
+    window.scrollTo({ top: 150, behavior: 'smooth' });
+  };
+
   // Reset current selection or log
   const handleResetDay = () => {
     if (window.confirm('Czy na pewno chcesz usunąć wszystkie dzisiejsze wpisy, wodę i wagę?')) {
@@ -309,18 +355,44 @@ export default function App() {
           </div>
 
           {/* Quick Stats overview or reset button */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-center sm:justify-end">
             <button
-              onClick={() => setActiveTab(activeTab === 'dziennik' ? 'baza' : 'dziennik')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('dziennik')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'dziennik' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/10' 
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100/60'
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5" /> 
+              Dziennik
+            </button>
+            <button
+              onClick={() => setActiveTab('baza')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'baza' 
-                  ? 'bg-slate-800 text-white' 
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/10' 
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100/60'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" /> 
-              {activeTab === 'baza' ? 'Wróć do Dziennika' : 'Baza Produktów'}
+              Moje Produkty
             </button>
+            <button
+              onClick={() => setActiveTab('przepisy')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'przepisy' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/10' 
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100/60'
+              }`}
+              id="tab-przepisy"
+            >
+              <ChefHat className="w-3.5 h-3.5" /> 
+              Moje Przepisy
+            </button>
+
+            <div className="w-px h-5 bg-slate-200 mx-1 hidden sm:block" />
+
             <button
               onClick={handleResetDay}
               className="p-2 hover:bg-rose-50 rounded-xl text-rose-500 transition-colors cursor-pointer border border-transparent hover:border-rose-100"
@@ -340,7 +412,7 @@ export default function App() {
           </span>
         </div>
 
-        {activeTab === 'baza' ? (
+        {activeTab === 'baza' && (
           /* ================= APP MODE: PRODUCT LIBRARY MANAGE ================= */
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6" id="baza-produktow">
             <div className="flex items-center justify-between">
@@ -470,8 +542,30 @@ export default function App() {
               )}
             </div>
           </div>
-        ) : (
-          /* ================= APP MODE: CORE MEAL DIARY ================= */
+        )}
+
+        {/* ================= APP MODE: RECIPE DATABASE AND MANAGER ================= */}
+        {activeTab === 'przepisy' && (
+          <RecipeManager
+            recipes={recipes}
+            productDatabase={productDatabase}
+            activeCategories={activeCategories}
+            selectedCategory={selectedCategory}
+            onSaveRecipe={handleSaveRecipe}
+            onDeleteRecipe={handleDeleteRecipe}
+            onLogRecipe={handleLogRecipe}
+            onOpenProductForm={(initialName) => {
+              setActiveTab('baza');
+              setShowProductForm(true);
+              if (initialName) {
+                setSearchTerm(initialName);
+              }
+            }}
+          />
+        )}
+
+        {/* ================= APP MODE: CORE MEAL DIARY ================= */}
+        {activeTab === 'dziennik' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="diary-grid-root">
             
             {/* Left side: Date, Meals list, and Quick Add */}

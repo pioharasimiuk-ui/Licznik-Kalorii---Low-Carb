@@ -49,3 +49,25 @@ export interface UserGoals {
   dietType?: 'balanced' | 'low-carb' | 'mediterranean' | 'custom';
   mealCount?: 3 | 5;
 }
+
+export interface RecipeIngredient {
+  productId: string;
+  name: string;
+  weightGrams: number;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  ingredients: RecipeIngredient[];
+  totalWeightGrams: number;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+}
+
