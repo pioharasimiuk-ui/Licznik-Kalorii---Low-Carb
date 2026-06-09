@@ -13,6 +13,8 @@ export interface Product {
   carbsPer100g: number;   // in grams
   fatPer100g: number;     // in grams
   isCustom?: boolean;     // user-created products
+  imageUrl?: string;      // optional database product image URL
+  barcode?: string;       // optional product barcode (EAN)
 }
 
 export interface MealLog {

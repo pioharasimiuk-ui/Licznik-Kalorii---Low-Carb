@@ -32,6 +32,7 @@ import WeightTracker from './components/WeightTracker';
 import ProductForm from './components/ProductForm';
 import RecipeManager from './components/RecipeManager';
 import ShareBackup from './components/ShareBackup';
+import OpenFoodFactsSearch from './components/OpenFoodFactsSearch';
 
 // Helper to get local date string YYYY-MM-DD
 const getTodayString = () => {
@@ -464,7 +465,7 @@ export default function App() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
+                  className="overflow-hidden mb-4"
                 >
                   <ProductForm 
                     onAddProduct={handleAddCustomProduct} 
@@ -474,16 +475,27 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Wyszukaj z bazy (wpisz np. chleb, mleko, ryż...)"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-800 focus:outline-emerald-500 focus:bg-white transition-colors"
-                />
+            {/* Global API Search Block */}
+            <OpenFoodFactsSearch 
+              onImportProduct={handleAddCustomProduct} 
+              customProducts={customProducts} 
+            />
+
+            <div className="space-y-4 pt-2 border-t border-slate-100">
+              <div className="flex flex-col">
+                <span className="text-xs font-black uppercase text-slate-500 tracking-wider mb-2">
+                  Przeszukaj swoją zapisaną bazę posiłków offline:
+                </span>
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Wyszukaj z bazy (wpisz np. chleb, mleko, ryż...)"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-800 focus:outline-emerald-500 focus:bg-white transition-colors"
+                  />
+                </div>
               </div>
 
               {/* Grid representation */}
