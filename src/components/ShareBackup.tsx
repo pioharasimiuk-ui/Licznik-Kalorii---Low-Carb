@@ -27,7 +27,9 @@ import {
   createUserWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  User as FirebaseUser 
+  User as FirebaseUser,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { 
@@ -118,6 +120,9 @@ export default function ShareBackup({
       if (err.code === 'auth/weak-password') errMsg = 'Hasło musi mieć co najmniej 6 znaków.';
       if (err.code === 'auth/email-already-in-use') errMsg = 'Ten adres e-mail jest już zarejestrowany.';
       if (err.code === 'auth/invalid-email') errMsg = 'Niepoprawny format adresu e-mail.';
+      if (err.code === 'auth/operation-not-allowed') {
+        errMsg = 'Rejestracja e-mailem i hasłem jest aktualnie wyłączona w Firebase Console dla tej instancji. Użyj "Zaloguj przez Google" lub poproś o włączenie metody E-mail/Password w konsoli Firebase.';
+      }
       setSyncMessage({ type: 'error', text: errMsg });
     } finally {
       setSyncLoading(false);
@@ -145,6 +150,39 @@ export default function ShareBackup({
       let errMsg = 'Błędny e-mail lub hasło.';
       if (err.code === 'auth/invalid-credential') errMsg = 'Nieprawidłowe dane logowania. Spróbuj ponownie.';
       if (err.code === 'auth/invalid-email') errMsg = 'Niepoprawny format adresu e-mail.';
+      if (err.code === 'auth/operation-not-allowed') {
+        errMsg = 'Obsługa logowania e-mailem i hasłem jest aktualnie wyłączona w Firebase Console. Użyj przycisku "Zaloguj przez Google" (który jest zazwyczaj domyślnie aktywny) lub uaktywnij opcję "E-mail/Password" we właściwościach Firebase Autentykacji.';
+      }
+      setSyncMessage({ type: 'error', text: errMsg });
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  // Handle Google Login
+  const handleGoogleLogin = async () => {
+    setSyncMessage(null);
+    setSyncLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      setSyncMessage({
+        type: 'success',
+        text: `Zalogowano pomyślnie z Google! Witaj ${userCredential.user.email || ''}.`
+      });
+      
+      // Auto-trigger sync merge on logins
+      await handleSyncMerge(userCredential.user.uid, userCredential.user.email || '');
+    } catch (err: any) {
+      console.error(err);
+      let errMsg = 'Błąd logowania przez Google.';
+      if (err.code === 'auth/popup-closed-by-user') {
+        errMsg = 'Okno logowania zostało zamknięte przez użytkownika.';
+      } else if (err.code === 'auth/blocked-by-popup-killer') {
+        errMsg = 'Blokada wyskakujących okieniek (popup blocker) uniemożliwiła otwarcie logowania.';
+      } else if (err.message) {
+        errMsg = err.message;
+      }
       setSyncMessage({ type: 'error', text: errMsg });
     } finally {
       setSyncLoading(false);
@@ -512,6 +550,39 @@ export default function ShareBackup({
                 ) : (
                   'Zaloguj się do chmury'
                 )}
+              </button>
+
+              <div className="relative my-2 flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">LUB</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={syncLoading}
+                className="w-full bg-slate-50 hover:bg-slate-100 disabled:bg-slate-200 disabled:text-slate-400 border border-slate-200 text-slate-700 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.61c-.3 1.5-1.12 2.76-2.38 3.6l3.65 2.84c2.15-1.98 3.865-4.9 3.865-8.29z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-3.65-2.84c-1.01.67-2.31 1.09-4.31 1.09-3.32 0-6.14-2.24-7.14-5.26H1.08v2.96C3.06 20.19 7.23 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M4.86 14.08a7.18 7.18 0 0 1 0-4.16V6.96H1.08a11.97 11.97 0 0 0 0 10.08l3.78-2.96z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.96 1.19 15.24 0 12 0 7.23 0 3.06 3.81 1.08 7.96l3.78 2.96c1-3.02 3.82-5.17 7.14-5.17z"
+                  />
+                </svg>
+                Zaloguj przez Google (Zalecane)
               </button>
 
               {/* Status messages info */}
