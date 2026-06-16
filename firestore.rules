@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Secure Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Path Variable Hardening (ID Poisoning Guard)
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User collection validation
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() <= 128
+          && data.email is string && data.email.size() <= 256;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUser(incoming());
+      allow delete: if isOwner(userId);
+
+      // CustomProducts subcollection
+      function isValidCustomProduct(data) {
+        return data.id is string && data.id.size() <= 128
+            && data.name is string && data.name.size() <= 200
+            && data.caloriesPer100g is number
+            && data.proteinPer100g is number
+            && data.carbsPer100g is number
+            && data.fatPer100g is number;
+      }
+
+      match /customProducts/{productId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(productId) && isValidCustomProduct(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      // Recipes subcollection
+      function isValidRecipe(data) {
+        return data.id is string && data.id.size() <= 128
+            && data.name is string && data.name.size() <= 200
+            && data.ingredients is list
+            && data.ingredients.size() <= 150
+            && data.totalWeightGrams is number
+            && data.totalCalories is number
+            && data.totalProtein is number
+            && data.totalCarbs is number
+            && data.totalFat is number;
+      }
+
+      match /recipes/{recipeId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(recipeId) && isValidRecipe(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      // DayLogs subcollection
+      function isValidDayLog(data) {
+        return data.date is string && data.date.size() <= 20
+            && data.meals is list
+            && data.meals.size() <= 300
+            && data.waterIntakeMl is number;
+      }
+
+      match /dayLogs/{date} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(date) && isValidDayLog(incoming());
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

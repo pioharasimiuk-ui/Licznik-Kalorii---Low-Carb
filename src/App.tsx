@@ -38,6 +38,18 @@ import OpenFoodFactsSearch from './components/OpenFoodFactsSearch';
 import MedsTracker from './components/MedsTracker';
 import ReportDashboard from './components/ReportDashboard';
 
+// Firebase Integrations
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { auth, testConnection } from './firebase';
+import { 
+  saveGoalsToFirebase, 
+  saveProductToFirebase, 
+  deleteProductFromFirebase, 
+  saveRecipeToFirebase, 
+  deleteRecipeFromFirebase, 
+  saveDayLogToFirebase 
+} from './sync';
+
 // Helper to get local date string YYYY-MM-DD
 const getTodayString = () => {
   const d = new Date();
@@ -48,6 +60,17 @@ const getTodayString = () => {
 };
 
 export default function App() {
+  // --- Firebase User & Initialization ---
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+
+  useEffect(() => {
+    testConnection();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setFirebaseUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // --- Persistent Local States ---
   const [currentDate, setCurrentDate] = useState<string>(getTodayString());
   
@@ -123,7 +146,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('kcal_user_goals', JSON.stringify(goals));
-  }, [goals]);
+    if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+      saveGoalsToFirebase(firebaseUser.uid, goals, firebaseUser.email || '');
+    }
+  }, [goals, firebaseUser]);
 
   // Combine static and custom products
   const productDatabase = useMemo(() => {
@@ -180,12 +206,19 @@ export default function App() {
         waterIntakeMl: 0,
         weightKg: undefined
       };
+      const merged = {
+        ...current,
+        ...updated
+      };
+      
+      // Auto sync current DayLog in background
+      if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+        saveDayLogToFirebase(firebaseUser.uid, currentDate, merged);
+      }
+
       return {
         ...prev,
-        [currentDate]: {
-          ...current,
-          ...updated
-        }
+        [currentDate]: merged
       };
     });
   };
@@ -231,6 +264,11 @@ export default function App() {
   const handleAddCustomProduct = (prod: Product) => {
     setCustomProducts((prev) => [prod, ...prev]);
     setShowProductForm(false);
+    
+    // Auto sync
+    if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+      saveProductToFirebase(firebaseUser.uid, prod);
+    }
   };
 
   // Remove a custom product from permanent library
@@ -239,16 +277,31 @@ export default function App() {
     if (selectedProduct?.id === productId) {
       setSelectedProduct(null);
     }
+    
+    // Auto sync
+    if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+      deleteProductFromFirebase(firebaseUser.uid, productId);
+    }
   };
 
   // Save a new recipe
   const handleSaveRecipe = (recipe: Recipe) => {
     setRecipes((prev) => [recipe, ...prev]);
+    
+    // Auto sync
+    if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+      saveRecipeToFirebase(firebaseUser.uid, recipe);
+    }
   };
 
   // Delete an existing recipe from database
   const handleDeleteRecipe = (recipeId: string) => {
     setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+    
+    // Auto sync
+    if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+      deleteRecipeFromFirebase(firebaseUser.uid, recipeId);
+    }
   };
 
   // Import custom products and recipes from sync code
@@ -256,13 +309,25 @@ export default function App() {
     setCustomProducts((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
       const filteredNew = importedProducts.map(p => ({ ...p, isCustom: true })).filter((p) => !existingIds.has(p.id));
-      return [...filteredNew, ...prev];
+      const finalProducts = [...filteredNew, ...prev];
+      
+      // Auto sync each imported product
+      if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+        filteredNew.forEach(p => saveProductToFirebase(firebaseUser.uid, p));
+      }
+      return finalProducts;
     });
 
     setRecipes((prev) => {
       const existingIds = new Set(prev.map((r) => r.id));
       const filteredNew = importedRecipes.filter((r) => !existingIds.has(r.id));
-      return [...filteredNew, ...prev];
+      const finalRecipes = [...filteredNew, ...prev];
+
+      // Auto sync each imported recipe
+      if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+        filteredNew.forEach(r => saveRecipeToFirebase(firebaseUser.uid, r));
+      }
+      return finalRecipes;
     });
   };
 
@@ -296,6 +361,16 @@ export default function App() {
       const copy = { ...dayLogs };
       delete copy[currentDate];
       setDayLogs(copy);
+      
+      // Auto sync: set empty/reset day log in Firebase
+      if (firebaseUser && localStorage.getItem('kcal_autosync_enabled') === 'true') {
+        saveDayLogToFirebase(firebaseUser.uid, currentDate, {
+          date: currentDate,
+          meals: [],
+          waterIntakeMl: 0,
+          weightKg: undefined
+        });
+      }
     }
   };
 
@@ -634,6 +709,12 @@ export default function App() {
           <ShareBackup
             customProducts={customProducts}
             recipes={recipes}
+            dayLogs={dayLogs}
+            goals={goals}
+            setCustomProducts={setCustomProducts}
+            setRecipes={setRecipes}
+            setDayLogs={setDayLogs}
+            setGoals={setGoals}
             onImportData={handleImportData}
           />
         )}
