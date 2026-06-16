@@ -29,7 +29,8 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInAnonymously
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { 
@@ -180,6 +181,34 @@ export default function ShareBackup({
         errMsg = 'Okno logowania zostało zamknięte przez użytkownika.';
       } else if (err.code === 'auth/blocked-by-popup-killer') {
         errMsg = 'Blokada wyskakujących okieniek (popup blocker) uniemożliwiła otwarcie logowania.';
+      } else if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('auth/unauthorized-domain'))) {
+        errMsg = `Błąd domen autoryzowanych (auth/unauthorized-domain). Aby logowanie przez Google działało, musisz dodać domenę "${window.location.hostname}" do autoryzowanych domen w swojej konsoli Firebase (Ustawienia Authentication -> Settings -> Authorized Domains). Poniżej znajdziesz instrukcję jak to zrobić!`;
+      } else if (err.message) {
+        errMsg = err.message;
+      }
+      setSyncMessage({ type: 'error', text: errMsg });
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  // Handle Anonymous Login (Guest cloud mode)
+  const handleAnonymousLogin = async () => {
+    setSyncMessage(null);
+    setSyncLoading(true);
+    try {
+      const userCredential = await signInAnonymously(auth);
+      setSyncMessage({
+        type: 'success',
+        text: `Zalogowano pomyślnie w bezpiecznym trybie gościa w chmurze! Twoje unikalne ID gościa: ${userCredential.user.uid.substring(0, 8)}...`
+      });
+      // Auto-trigger sync merge
+      await handleSyncMerge(userCredential.user.uid, 'anonymous-guest@local.app');
+    } catch (err: any) {
+      console.error(err);
+      let errMsg = 'Nie udało się zalogować jako gość.';
+      if (err.code === 'auth/operation-not-allowed') {
+        errMsg = 'Logowanie anonimowe (Anonymous) jest aktualnie wyłączone w konsoli Firebase dla tego projektu. Przejdź do Firebase Console -> Authentication -> Sign-in method i włącz "Anonymous" (Anonimowy), a następnie spróbuj ponownie.';
       } else if (err.message) {
         errMsg = err.message;
       }
@@ -506,6 +535,16 @@ export default function ShareBackup({
                 </button>
               </div>
 
+              {/* Info banner specifically for APK / Phone users */}
+              <div className="bg-blue-50/75 rounded-2xl p-3 border border-blue-100 text-[11px] text-blue-800 leading-normal flex items-start gap-2">
+                <Smartphone className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block mb-0.5">Wskazówka dla aplikacji na telefonie (APK):</strong>
+                  Logowanie Google nie działa w plikach APK z powodu restrykcji Google dla widoków WebView. 
+                  <span className="block mt-1 font-semibold text-slate-700">Wybierz na górze &ldquo;Rejestracja darmowa&rdquo;, wpisz swój e-mail i hasło &mdash; to zadziała natychmiast, bez żadnych błędów i połączy Cię z bazą danych!</span>
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">E-mail</label>
@@ -558,32 +597,44 @@ export default function ShareBackup({
                 <div className="flex-grow border-t border-slate-200"></div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                disabled={syncLoading}
-                className="w-full bg-slate-50 hover:bg-slate-100 disabled:bg-slate-200 disabled:text-slate-400 border border-slate-200 text-slate-700 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.61c-.3 1.5-1.12 2.76-2.38 3.6l3.65 2.84c2.15-1.98 3.865-4.9 3.865-8.29z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-3.65-2.84c-1.01.67-2.31 1.09-4.31 1.09-3.32 0-6.14-2.24-7.14-5.26H1.08v2.96C3.06 20.19 7.23 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M4.86 14.08a7.18 7.18 0 0 1 0-4.16V6.96H1.08a11.97 11.97 0 0 0 0 10.08l3.78-2.96z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.96 1.19 15.24 0 12 0 7.23 0 3.06 3.81 1.08 7.96l3.78 2.96c1-3.02 3.82-5.17 7.14-5.17z"
-                  />
-                </svg>
-                Zaloguj przez Google (Zalecane)
-              </button>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={syncLoading}
+                  className="w-full bg-slate-50 hover:bg-slate-100 disabled:bg-slate-200 disabled:text-slate-400 border border-slate-200 text-slate-700 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.61c-.3 1.5-1.12 2.76-2.38 3.6l3.65 2.84c2.15-1.98 3.865-4.9 3.865-8.29z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-3.65-2.84c-1.01.67-2.31 1.09-4.31 1.09-3.32 0-6.14-2.24-7.14-5.26H1.08v2.96C3.06 20.19 7.23 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M4.86 14.08a7.18 7.18 0 0 1 0-4.16V6.96H1.08a11.97 11.97 0 0 0 0 10.08l3.78-2.96z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.96 1.19 15.24 0 12 0 7.23 0 3.06 3.81 1.08 7.96l3.78 2.96c1-3.02 3.82-5.17 7.14-5.17z"
+                    />
+                  </svg>
+                  Zaloguj przez Google
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAnonymousLogin}
+                  disabled={syncLoading}
+                  className="w-full bg-slate-50 hover:bg-slate-100 disabled:bg-slate-200 disabled:text-slate-400 border border-slate-200 text-slate-700 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Radio className="w-4 h-4 text-emerald-500 shrink-0" />
+                  Szybki start jako Gość (Tryb Chmurny)
+                </button>
+              </div>
 
               {/* Status messages info */}
               {syncMessage && (
@@ -597,6 +648,52 @@ export default function ShareBackup({
                   {syncMessage.text}
                 </div>
               )}
+
+              {/* Sekcja Rozwiązywania Problemów */}
+              <div className="mt-4 pt-3 border-t border-slate-150 space-y-2">
+                <details className="group">
+                  <summary className="flex items-center justify-between text-[11px] font-bold text-slate-500 cursor-pointer hover:text-slate-800 list-none select-none">
+                    <span className="flex items-center gap-1.5 text-slate-600">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" /> Wyjaśnienie błędu domen i konfiguracji
+                    </span>
+                    <span className="transition-transform group-open:rotate-180 text-[9px] text-slate-400">▼</span>
+                  </summary>
+                  <div className="mt-2 text-[11px] text-slate-500 space-y-2.5 bg-slate-50 rounded-xl p-3 border border-slate-150 leading-relaxed">
+                    <div>
+                      <strong className="text-slate-705 text-slate-700 block mb-0.5">1. Błąd AUTHORIZATION DOMAIN (unauthorized-domain):</strong>
+                      <span>Aplikacja podglądu w AI Studio działa na zewnętrznej domenie Cloud Run. Podpięta przez Ciebie baza Firebase blokuje logowanie przez Google z nieznanych domen. Aby temu zapobiec:</span>
+                      <ol className="list-decimal list-inside ml-1 mt-1 space-y-1">
+                        <li>Otwórz swoją <b>Firebase Console</b>.</li>
+                        <li>Wejdź w <b>Authentication</b> → zakładka <b>Settings</b> na górnym pasku → <b>Authorized Domains</b> (Domeny autoryzowane).</li>
+                        <li>Kliknij <b>Add domain</b> (Dodaj domenę) i wklej dokładnie poniższą domenę: <code className="bg-white px-1.5 py-0.5 border border-slate-200 rounded font-mono text-[10px] select-all block mt-1 break-all">{window.location.hostname}</code></li>
+                      </ol>
+                    </div>
+
+                    <div className="border-t border-slate-200/50 pt-2">
+                      <strong className="text-slate-700 block mb-0.5">2. Błąd operation-not-allowed dla E-mail / Rejestracji:</strong>
+                      <span>Oznacza to, że nie włączyłeś danej metody logowania w Firebase.</span>
+                      <ul className="list-disc list-inside ml-1 mt-1 space-y-1">
+                        <li>W konsoli Firebase wejdź w <b>Authentication</b> → zakładka <b>Sign-in method</b>.</li>
+                        <li>Włącz (Enable) metody <b>Email/Password</b>, <b>Google</b> oraz <b>Anonymous</b>, jeśli chcesz z nich korzystać.</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-blue-50/50 text-blue-900 px-2.5 py-2 rounded-lg border border-blue-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <span className="font-medium text-[10px] leading-tight shrink">Skopiuj tę domenę do ustawień Firebase:<br/><strong className="select-all font-mono text-[9px] break-all">{window.location.hostname}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(window.location.hostname);
+                          alert('Skopiowano domenę do schowka: ' + window.location.hostname);
+                        }}
+                        className="bg-white hover:bg-slate-100 text-slate-800 text-[10px] font-bold px-2 py-1 rounded border border-slate-200 cursor-pointer shrink-0 transition"
+                      >
+                        Kopiuj
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </div>
             </form>
           </div>
         ) : (

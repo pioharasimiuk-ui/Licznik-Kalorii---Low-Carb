@@ -10,16 +10,43 @@ import {
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { Product, Recipe, DayLog, UserGoals } from './types';
 
+/**
+ * Recursively removes all 'undefined' properties from an object so that Firestore does not throw
+ * "Unsupported field value: undefined" errors. It also ensures nested objects and arrays are sanitized.
+ */
+export function sanitizeForFirestore<T>(val: T): T {
+  if (val === undefined) {
+    return null as any; 
+  }
+  if (val === null) {
+    return null as any;
+  }
+  if (Array.isArray(val)) {
+    return val.map(item => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof val === 'object') {
+    const cleaned: any = {};
+    for (const key of Object.keys(val as any)) {
+      const value = (val as any)[key];
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned;
+  }
+  return val;
+}
+
 // Save/Update User Goals
 export async function saveGoalsToFirebase(userId: string, goals: UserGoals, email: string) {
   const path = `users/${userId}`;
   try {
-    await setDoc(doc(db, 'users', userId), {
+    await setDoc(doc(db, 'users', userId), sanitizeForFirestore({
       uid: userId,
       email: email,
       goals,
       updatedAt: new Date().toISOString()
-    }, { merge: true });
+    }), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -45,12 +72,12 @@ export async function fetchUserData(userId: string): Promise<UserGoals | null> {
 export async function saveProductToFirebase(userId: string, product: Product) {
   const path = `users/${userId}/customProducts/${product.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'customProducts', product.id), {
+    await setDoc(doc(db, 'users', userId, 'customProducts', product.id), sanitizeForFirestore({
       ...product,
       // For type enforcement, ensure undefined fields are removed
       imageUrl: product.imageUrl || '',
       barcode: product.barcode || '',
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -86,7 +113,7 @@ export async function fetchUserProducts(userId: string): Promise<Product[]> {
 export async function saveRecipeToFirebase(userId: string, recipe: Recipe) {
   const path = `users/${userId}/recipes/${recipe.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'recipes', recipe.id), recipe);
+    await setDoc(doc(db, 'users', userId, 'recipes', recipe.id), sanitizeForFirestore(recipe));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -122,13 +149,13 @@ export async function fetchUserRecipes(userId: string): Promise<Recipe[]> {
 export async function saveDayLogToFirebase(userId: string, date: string, dayLog: DayLog) {
   const path = `users/${userId}/dayLogs/${date}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'dayLogs', date), {
+    await setDoc(doc(db, 'users', userId, 'dayLogs', date), sanitizeForFirestore({
       date: dayLog.date,
       meals: dayLog.meals || [],
       waterIntakeMl: dayLog.waterIntakeMl || 0,
       weightKg: dayLog.weightKg ?? null,
       medsTaken: dayLog.medsTaken || {}
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -185,11 +212,11 @@ export async function bulkUploadToFirebase(
   // Upload products
   for (const product of products) {
     const docRef = doc(db, 'users', userId, 'customProducts', product.id);
-    batch.set(docRef, {
+    batch.set(docRef, sanitizeForFirestore({
       ...product,
       imageUrl: product.imageUrl || '',
       barcode: product.barcode || '',
-    });
+    }));
     opCount++;
     await commitBatchIfNeeded();
   }
@@ -197,7 +224,7 @@ export async function bulkUploadToFirebase(
   // Upload recipes
   for (const recipe of recipes) {
     const docRef = doc(db, 'users', userId, 'recipes', recipe.id);
-    batch.set(docRef, recipe);
+    batch.set(docRef, sanitizeForFirestore(recipe));
     opCount++;
     await commitBatchIfNeeded();
   }
@@ -205,13 +232,13 @@ export async function bulkUploadToFirebase(
   // Upload daily logs
   for (const [date, log] of Object.entries(dayLogs)) {
     const docRef = doc(db, 'users', userId, 'dayLogs', date);
-    batch.set(docRef, {
+    batch.set(docRef, sanitizeForFirestore({
       date: log.date,
       meals: log.meals || [],
       waterIntakeMl: log.waterIntakeMl || 0,
       weightKg: log.weightKg ?? null,
       medsTaken: log.medsTaken || {}
-    });
+    }));
     opCount++;
     await commitBatchIfNeeded();
   }
